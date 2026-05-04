@@ -4,9 +4,9 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { LockedFeature } from '../components/LockedFeature';
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { LockedFeature } from '@/components/LockedFeature';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 export default function ReviewMonitoring() {

@@ -1,22 +1,18 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import { useBusinessProfile } from '../hooks/useBusinessProfile';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
 import { Lead } from '../types';
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
-} from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { AlertTriangle } from 'lucide-react';
 
-/**
- * Leads management view.
- * Requires Supabase connection to store lead data.
- */
 export default function Leads() {
   const { profile } = useBusinessProfile();
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -29,14 +25,10 @@ export default function Leads() {
     interest: '',
   });
 
-  // Check Supabase after mount
   useEffect(() => {
-    if (!supabase) {
-      const stored = localStorage.getItem('supabase_url');
-      if (!stored) {
-        setNeedsSetup(true);
-        setLoading(false);
-      }
+    if (!isSupabaseConfigured()) {
+      setNeedsSetup(true);
+      setLoading(false);
     }
   }, []);
 
@@ -59,7 +51,10 @@ export default function Leads() {
   }, [profile, needsSetup]);
 
   const addLead = async () => {
-    if (!supabase || !profile?.id) return;
+    if (!supabase || !profile?.id) {
+      toast.error('Database not connected');
+      return;
+    }
     const { error } = await supabase
       .from('leads')
       .insert({ ...newLead, business_id: profile.id, status: 'New' });
@@ -94,7 +89,7 @@ export default function Leads() {
           <p className="text-sm text-muted-foreground mt-2">
             Leads require a Supabase database.
           </p>
-          <Button className="mt-4" onClick={() => window.location.href = '/setup'}>
+          <Button className="mt-4" onClick={() => (window.location.href = '/setup')}>
             Set Up Supabase
           </Button>
         </Card>

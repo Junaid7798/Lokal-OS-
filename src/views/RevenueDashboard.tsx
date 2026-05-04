@@ -1,21 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import { useBusinessProfile } from '../hooks/useBusinessProfile';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
 import { Visit } from '../types';
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
-} from '../components/ui/card';
+} from '@/components/ui/card';
 import { IndianRupee, AlertCircle } from 'lucide-react';
-import { Button } from '../components/ui/button';
+import { Button } from '@/components/ui/button';
 import { AlertTriangle } from 'lucide-react';
 
-/**
- * Revenue dashboard view.
- * Requires Supabase connection to store visit data.
- */
 export default function RevenueDashboard() {
   const { profile } = useBusinessProfile();
   const [visits, setVisits] = useState<Visit[]>([]);
@@ -23,12 +19,9 @@ export default function RevenueDashboard() {
   const [needsSetup, setNeedsSetup] = useState(false);
 
   useEffect(() => {
-    if (!supabase) {
-      const stored = localStorage.getItem('supabase_url');
-      if (!stored) {
-        setNeedsSetup(true);
-        setLoading(false);
-      }
+    if (!isSupabaseConfigured()) {
+      setNeedsSetup(true);
+      setLoading(false);
     }
   }, []);
 
@@ -41,7 +34,7 @@ export default function RevenueDashboard() {
         .select('*')
         .eq('business_id', profile.id);
       if (error) {
-        console.error('Failed to load visits');
+        toast.error('Failed to load visits');
       } else if (data) {
         setVisits(data);
       }
@@ -62,7 +55,7 @@ export default function RevenueDashboard() {
           <p className="text-sm text-muted-foreground mt-2">
             Revenue tracking requires Supabase.
           </p>
-          <Button className="mt-4" onClick={() => window.location.href = '/setup'}>
+          <Button className="mt-4" onClick={() => (window.location.href = '/setup')}>
             Set Up Supabase
           </Button>
         </Card>
@@ -137,3 +130,5 @@ export default function RevenueDashboard() {
     </div>
   );
 }
+
+import { toast } from 'sonner';

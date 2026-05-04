@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import { useBusinessProfile } from '../hooks/useBusinessProfile';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from '../components/ui/card';
-import { Button } from '../components/ui/button';
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import {
   format,
   startOfDay,
@@ -17,17 +17,17 @@ import {
   subDays,
   isAfter,
 } from 'date-fns';
-import { Copy, Printer } from 'lucide-react';
+import { Copy, Printer, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { Input } from '../components/ui/input';
+import { Input } from '@/components/ui/input';
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-} from '../components/ui/tabs';
-import { LockedFeature } from '../components/LockedFeature';
-import { AISummary } from '../components/AISummary';
+} from '@/components/ui/tabs';
+import { LockedFeature } from '@/components/LockedFeature';
+import { AISummary } from '@/components/AISummary';
 
 interface ReportData {
   customersAdded: number;
@@ -49,11 +49,23 @@ export default function Reports() {
   const [dailyStats, setDailyStats] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [needsSetup, setNeedsSetup] = useState(false);
+
   useEffect(() => {
-    if (profile?.id) loadStats();
+    if (!isSupabaseConfigured()) {
+      setNeedsSetup(true);
+      setLoading(false);
+      return;
+    }
+    if (profile?.id && supabase) loadStats();
   }, [profile, selectedDate]);
 
   async function loadStats() {
+    if (!supabase || !profile?.id) {
+      setNeedsSetup(true);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const start = startOfDay(new Date(selectedDate)).toISOString();
     const end = endOfDay(new Date(selectedDate)).toISOString();
@@ -144,6 +156,26 @@ Overdue follow-ups: ${data.overdueFollowups}`;
     navigator.clipboard.writeText(text);
     toast.success('Report copied to clipboard!');
   };
+
+  if (needsSetup) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto space-y-6">
+        <h1 className="text-2xl font-bold">Reports</h1>
+        <Card className="p-6">
+          <div className="flex items-center gap-2 text-amber-600">
+            <AlertTriangle className="h-5 w-5" />
+            <p className="font-medium">Supabase Not Connected</p>
+          </div>
+          <p className="text-sm text-muted-foreground mt-2">
+            Reports require a Supabase database.
+          </p>
+          <Button className="mt-4" onClick={() => (window.location.href = '/setup')}>
+            Set Up Supabase
+          </Button>
+        </Card>
+      </div>
+    );
+  }
 
   if (loading) return <div>Loading...</div>;
 

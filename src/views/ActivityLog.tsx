@@ -4,9 +4,9 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-} from '../components/ui/card';
-import { supabase } from '../lib/supabaseClient';
-import { useBusinessProfile } from '../hooks/useBusinessProfile';
+} from '@/components/ui/card';
+import { supabase } from '@/lib/supabaseClient';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
 import { format } from 'date-fns';
 
 export default function ActivityLog() {

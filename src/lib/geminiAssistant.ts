@@ -43,7 +43,7 @@ export const generateMessage = async (params: {
   return response.text || '';
 };
 
-export const generateSummary = async (data: Record<string, any>) => {
+export const generateSummary = async (data: Record<string, unknown>) => {
   if (!ai) throw new Error('AI Assistant not configured. No API key found.');
 
   const prompt = `

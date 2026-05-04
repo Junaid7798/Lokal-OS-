@@ -1,23 +1,23 @@
 import React, { useState } from 'react';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '../components/ui/card';
-import { isSupabaseConfigured } from '../lib/supabaseClient';
+} from '@/components/ui/card';
+import { isSupabaseConfigured, saveSupabaseConfig } from '@/lib/supabaseClient';
 
 /**
  * Supabase setup page.
  * Shows connection status and allows updating credentials.
  */
 export default function SetupSupabase() {
-  const [url, setUrl] = useState(() => localStorage.getItem('supabase_url') || '');
-  const [key, setKey] = useState(() => localStorage.getItem('supabase_anon_key') || '');
+  const [url, setUrl] = useState('');
+  const [key, setKey] = useState('');
   const [status, setStatus] = useState<'idle' | 'saved' | 'error'>('idle');
 
   const isConfigured = isSupabaseConfigured();
@@ -25,12 +25,10 @@ export default function SetupSupabase() {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!url || !key) return;
-    
-    localStorage.setItem('supabase_url', url.trim());
-    localStorage.setItem('supabase_anon_key', key.trim());
+
+    saveSupabaseConfig(url.trim(), key.trim());
     setStatus('saved');
-    
-    // Small delay to show saved message
+
     setTimeout(() => {
       window.location.reload();
     }, 500);
@@ -42,7 +40,7 @@ export default function SetupSupabase() {
         <CardHeader>
           <CardTitle>Supabase Connection</CardTitle>
           <CardDescription>
-            {isConfigured 
+            {isConfigured
               ? 'Your Supabase is connected. Update credentials below if needed.'
               : 'Connect Supabase to enable Campaigns, Leads, Loyalty, and Revenue features.'}
           </CardDescription>
@@ -78,11 +76,11 @@ export default function SetupSupabase() {
               {isConfigured ? 'Update Connection' : 'Connect'}
             </Button>
             {isConfigured && (
-              <Button 
-                type="button" 
+              <Button
+                type="button"
                 variant="outline"
                 className="w-full"
-                onClick={() => window.location.href = '/'}
+                onClick={() => (window.location.href = '/')}
               >
                 Go to Dashboard
               </Button>

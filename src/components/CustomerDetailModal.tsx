@@ -1,24 +1,24 @@
 import { useState, useEffect } from 'react';
-import { localDb } from '../lib/localDb';
-import { logAction } from '../lib/auditLogger';
-import { useBusinessProfile } from '../hooks/useBusinessProfile';
-import { supabase } from '../lib/supabaseClient';
+import { localDb } from '@/lib/localDb';
+import { logAction } from '@/lib/auditLogger';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
+import { supabase } from '@/lib/supabaseClient';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '../components/ui/dialog';
-import { Label } from '../components/ui/label';
-import { Input } from '../components/ui/input';
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../components/ui/select';
-import { Button } from '../components/ui/button';
+} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { Phone, Edit2, X, CalendarPlus } from 'lucide-react';
 import { format } from 'date-fns';

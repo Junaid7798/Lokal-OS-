@@ -1,23 +1,26 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import { useBusinessProfile } from '../hooks/useBusinessProfile';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
 import { Campaign, CampaignRecipient, Customer } from '../types';
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
-} from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
-import { MessageAssistant } from '../components/MessageAssistant';
+import { MessageAssistant } from '@/components/MessageAssistant';
 import { AlertTriangle } from 'lucide-react';
 
-/**
- * Campaigns management view.
- * Requires Supabase connection to store campaign data.
- */
 export default function Campaigns() {
   const { profile } = useBusinessProfile();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -31,19 +34,13 @@ export default function Campaigns() {
     message_template: '',
   });
 
-  // Check Supabase after mount
   useEffect(() => {
-    if (!supabase) {
-      // Check localStorage directly as fallback
-      const stored = localStorage.getItem('supabase_url');
-      if (!stored) {
-        setNeedsSetup(true);
-        setLoading(false);
-      }
+    if (!isSupabaseConfigured()) {
+      setNeedsSetup(true);
+      setLoading(false);
     }
   }, []);
 
-  // Load campaigns when profile is ready and Supabase is available
   useEffect(() => {
     if (!supabase || !profile?.id || needsSetup) return;
     setLoading(true);
@@ -62,7 +59,6 @@ export default function Campaigns() {
       });
   }, [profile, needsSetup]);
 
-  // Load recipients when campaign selected
   useEffect(() => {
     if (!supabase || !selectedCampaign || needsSetup) return;
 
@@ -80,7 +76,10 @@ export default function Campaigns() {
   }, [selectedCampaign, needsSetup]);
 
   const createCampaign = async () => {
-    if (!supabase || !profile?.id) return;
+    if (!supabase || !profile?.id) {
+      toast.error('Database not connected');
+      return;
+    }
     const { data, error } = await supabase
       .from('campaigns')
       .insert({ ...newCampaign, business_id: profile.id })
@@ -108,7 +107,19 @@ export default function Campaigns() {
     );
   };
 
-  // Show setup needed screen
+  const openWhatsApp = (phone: string | undefined, message: string) => {
+    const digits = phone?.replace(/\D/g, '');
+    if (!digits) {
+      toast.error('Invalid phone number');
+      return;
+    }
+    window.open(
+      `https://wa.me/${digits}?text=${encodeURIComponent(message)}`,
+      '_blank',
+      'noopener,noreferrer'
+    );
+  };
+
   if (needsSetup) {
     return (
       <div className="p-4 space-y-4">
@@ -122,7 +133,7 @@ export default function Campaigns() {
             Campaigns require a Supabase database. Please set up your Supabase
             connection.
           </p>
-          <Button className="mt-4" onClick={() => window.location.href = '/setup'}>
+          <Button className="mt-4" onClick={() => (window.location.href = '/setup')}>
             Set Up Supabase
           </Button>
         </Card>
@@ -151,15 +162,21 @@ export default function Campaigns() {
         <CardContent className="grid gap-2">
           <Input
             placeholder="Campaign Name"
+            value={newCampaign.name}
             onChange={(e) => setNewCampaign({ ...newCampaign, name: e.target.value })}
           />
-          <select
-            className="border p-2"
-            onChange={(e) => setNewCampaign({ ...newCampaign, segment_type: e.target.value })}
+          <Select
+            value={newCampaign.segment_type}
+            onValueChange={(v) => setNewCampaign({ ...newCampaign, segment_type: v })}
           >
-            <option value="inactive_30">Inactive 30+ days</option>
-            <option value="vip">VIP</option>
-          </select>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="inactive_30">Inactive 30+ days</SelectItem>
+              <SelectItem value="vip">VIP</SelectItem>
+            </SelectContent>
+          </Select>
           <div className="flex gap-2">
             <Input
               placeholder="Message Template"
@@ -202,9 +219,7 @@ export default function Campaigns() {
                     <Button
                       size="sm"
                       onClick={() =>
-                        window.open(
-                          `https://wa.me/${r.customer?.phone}?text=${encodeURIComponent(selectedCampaign.message_template)}`
-                        )
+                        openWhatsApp(r.customer?.phone, selectedCampaign.message_template)
                       }
                     >
                       WhatsApp

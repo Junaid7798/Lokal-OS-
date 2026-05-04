@@ -1,16 +1,16 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import { useBusinessProfile } from '../hooks/useBusinessProfile';
-import { localDb } from '../lib/localDb';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
+import { localDb } from '@/lib/localDb';
 import {
   useCustomerStats,
   useRecentChartData,
-} from '../hooks/useCustomerStats';
-import { useAlerts, useOccasions } from '../hooks/useAlerts';
-import { generateWhatsAppLink } from '../lib/validation';
-import { chartTooltipStyles } from '../lib/utils';
-import { Card } from '../components/ui/card';
-import { Button } from '../components/ui/button';
+} from '@/hooks/useCustomerStats';
+import { useAlerts, useOccasions } from '@/hooks/useAlerts';
+import { generateWhatsAppLink } from '@/lib/validation';
+import { chartTooltipStyles } from '@/lib/utils';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import {
   Settings,
   Users,
@@ -21,7 +21,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { Skeleton } from '../components/ui/skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import type {
   CustomerWithVisits,
   Action,
@@ -63,29 +63,44 @@ export default function Home() {
   useEffect(() => {
     async function fetchData() {
       if (profile?.id) {
-        const { data: customersData } = await supabase
-          .from('customers')
-          .select('*, visits(*), actions(*)')
-          .eq('business_id', profile.id);
+        let typedCustomers: CustomerData[] = [];
+        if (supabase) {
+          const { data: customersData } = await supabase
+            .from('customers')
+            .select('*, visits(*), actions(*)')
+            .eq('business_id', profile.id);
 
-        const typedCustomers: CustomerData[] = (customersData || []).map(
-          (c) => ({
-            ...c,
-            visits: c.visits || [],
-            tags: c.tags || [],
-            notes: c.notes || '',
-          })
-        );
+          typedCustomers = (customersData || []).map(
+            (c) => ({
+              ...c,
+              visits: c.visits || [],
+              tags: c.tags || [],
+              notes: c.notes || '',
+            })
+          );
+        } else {
+          const localCustomers = await localDb.getCustomers(profile.id);
+          typedCustomers = (localCustomers || []).map(
+            (c: Record<string, unknown>) => ({
+              ...c,
+              visits: (c.visits as unknown[]) || [],
+              tags: (c.tags as string[]) || [],
+              notes: (c.notes as string) || '',
+            })
+          ) as CustomerData[];
+        }
         setCustomers(typedCustomers);
 
         const dbActions = (await localDb.getActions(profile.id) as unknown as Action[]) || [];
         setAllActions(dbActions);
 
-        const { data: packagesData } = await supabase
-          .from('customer_packages')
-          .select('*')
-          .eq('business_id', profile.id);
-        setPackages(packagesData || []);
+        if (supabase) {
+          const { data: packagesData } = await supabase
+            .from('customer_packages')
+            .select('*')
+            .eq('business_id', profile.id);
+          setPackages(packagesData || []);
+        }
       }
       setLoading(false);
     }

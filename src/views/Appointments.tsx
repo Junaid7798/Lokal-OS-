@@ -1,17 +1,24 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import { useBusinessProfile } from '../hooks/useBusinessProfile';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
 import { Appointment, Customer } from '../types';
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
-} from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
+import { AlertTriangle } from 'lucide-react';
 
 export default function Appointments() {
   const { profile } = useBusinessProfile();
@@ -25,9 +32,15 @@ export default function Appointments() {
     staff_name: '',
     notes: '',
   });
+  const [needsSetup, setNeedsSetup] = useState(false);
 
   useEffect(() => {
-    if (!profile?.id) return;
+    if (!isSupabaseConfigured()) {
+      setNeedsSetup(true);
+      return;
+    }
+    if (!profile?.id || !supabase) return;
+
     supabase
       .from('appointments')
       .select('*')
@@ -53,7 +66,10 @@ export default function Appointments() {
   }, [profile]);
 
   const createAppointment = async () => {
-    if (!profile?.id) return;
+    if (!supabase || !profile?.id) {
+      toast.error('Database not connected');
+      return;
+    }
     const { error } = await supabase
       .from('appointments')
       .insert({ ...newAppointment, business_id: profile.id });
@@ -72,7 +88,8 @@ export default function Appointments() {
     });
   };
 
-  const updateStatus = async (a: Appointment, status: string) => {
+  const updateStatus = async (a: Appointment, status: Appointment['status']) => {
+    if (!supabase) return;
     const { error } = await supabase
       .from('appointments')
       .update({ status })
@@ -103,15 +120,43 @@ export default function Appointments() {
 
     setAppointments(
       appointments.map((apt) =>
-        apt.id === a.id 
-          ? { 
-              ...apt, 
-              status: status as 'Booked' | 'Confirmed' | 'Completed' | 'No-Show' | 'Cancelled' | 'Rescheduled' 
-            } 
-          : apt
+        apt.id === a.id ? { ...apt, status } : apt
       )
     );
   };
+
+  const openWhatsApp = (phone: string | undefined, message: string) => {
+    const digits = phone?.replace(/\D/g, '');
+    if (!digits) {
+      toast.error('Invalid phone number');
+      return;
+    }
+    window.open(
+      `https://wa.me/${digits}?text=${encodeURIComponent(message)}`,
+      '_blank',
+      'noopener,noreferrer'
+    );
+  };
+
+  if (needsSetup) {
+    return (
+      <div className="p-4 space-y-4">
+        <h1 className="text-2xl font-bold">Appointments</h1>
+        <Card className="p-6">
+          <div className="flex items-center gap-2 text-amber-600">
+            <AlertTriangle className="h-5 w-5" />
+            <p className="font-medium">Supabase Not Connected</p>
+          </div>
+          <p className="text-sm text-muted-foreground mt-2">
+            Appointments require a Supabase database.
+          </p>
+          <Button className="mt-4" onClick={() => (window.location.href = '/setup')}>
+            Set Up Supabase
+          </Button>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 space-y-4">
@@ -122,38 +167,40 @@ export default function Appointments() {
           <CardTitle>Book Appointment</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-2">
-          <select
-            className="border p-2"
-            onChange={(e) =>
-              setNewAppointment({
-                ...newAppointment,
-                customer_id: e.target.value,
-              })
-            }
+          <Select
+            value={newAppointment.customer_id}
+            onValueChange={(v) => setNewAppointment({ ...newAppointment, customer_id: v })}
           >
-            <option value="">Select Customer</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger>
+              <SelectValue placeholder="Select Customer" />
+            </SelectTrigger>
+            <SelectContent>
+              {customers.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Input
             type="date"
+            value={newAppointment.appointment_date}
             onChange={(e) =>
-              setNewAppointment({
-                ...newAppointment,
-                appointment_date: e.target.value,
-              })
+              setNewAppointment({ ...newAppointment, appointment_date: e.target.value })
             }
           />
           <Input
             type="time"
+            value={newAppointment.appointment_time}
             onChange={(e) =>
-              setNewAppointment({
-                ...newAppointment,
-                appointment_time: e.target.value,
-              })
+              setNewAppointment({ ...newAppointment, appointment_time: e.target.value })
+            }
+          />
+          <Input
+            placeholder="Service Category"
+            value={newAppointment.service_category}
+            onChange={(e) =>
+              setNewAppointment({ ...newAppointment, service_category: e.target.value })
             }
           />
           <Button onClick={createAppointment}>Book</Button>
@@ -162,27 +209,30 @@ export default function Appointments() {
 
       <div className="grid gap-2">
         {appointments.map((a) => (
-          <Card key={a.id} className="p-2 flex justify-between items-center">
-            <div>
-              <p className="font-bold">
-                {a.appointment_date} {a.appointment_time}
-              </p>
-              <p>{a.status}</p>
+          <Card key={a.id} className="p-4 flex flex-col gap-2">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="font-bold">
+                  {a.appointment_date} {a.appointment_time}
+                </p>
+                <p className="text-sm text-muted-foreground">{a.status}</p>
+              </div>
+              <div className="flex gap-1">
+                {(['Confirmed', 'Completed', 'No-Show'] as const).map((s) => (
+                  <Button size="sm" key={s} onClick={() => updateStatus(a, s)}>
+                    {s}
+                  </Button>
+                ))}
+              </div>
             </div>
             <div className="flex gap-1">
-              {['Confirmed', 'Completed', 'No-Show'].map((s) => (
-                <Button size="sm" key={s} onClick={() => updateStatus(a, s)}>
-                  {s}
-                </Button>
-              ))}
-            </div>
-            <div className="flex gap-1 mt-2">
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() =>
-                  window.open(
-                    `https://wa.me/${customers.find((c) => c.id === a.customer_id)?.phone}?text=Confirming your appointment on ${a.appointment_date} at ${a.appointment_time}`
+                  openWhatsApp(
+                    customers.find((c) => c.id === a.customer_id)?.phone,
+                    `Confirming your appointment on ${a.appointment_date} at ${a.appointment_time}`
                   )
                 }
               >
@@ -192,8 +242,9 @@ export default function Appointments() {
                 size="sm"
                 variant="outline"
                 onClick={() =>
-                  window.open(
-                    `https://wa.me/${customers.find((c) => c.id === a.customer_id)?.phone}?text=Reminder: Your appointment is on ${a.appointment_date} at ${a.appointment_time}`
+                  openWhatsApp(
+                    customers.find((c) => c.id === a.customer_id)?.phone,
+                    `Reminder: Your appointment is on ${a.appointment_date} at ${a.appointment_time}`
                   )
                 }
               >

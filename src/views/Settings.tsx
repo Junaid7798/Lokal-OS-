@@ -1,23 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { localDb } from '../lib/localDb';
-import { useBusinessProfile } from '../hooks/useBusinessProfile';
-import { supabase } from '../lib/supabaseClient';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
+import { localDb } from '@/lib/localDb';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
+import { supabase } from '@/lib/supabaseClient';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-} from '../components/ui/tabs';
+} from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { LogOut } from 'lucide-react';
-import { BusinessSettings } from '../components/settings/BusinessSettings';
-import { MessageSettings } from '../components/settings/MessageSettings';
-import { FollowUpRules } from '../components/settings/FollowUpRules';
-import { BrandingSettings } from '../components/settings/BrandingSettings';
-import { DataExport } from '../components/settings/DataExport';
-import type { ServiceFollowupRule } from '../types';
+import { BusinessSettings } from '@/components/settings/BusinessSettings';
+import { MessageSettings } from '@/components/settings/MessageSettings';
+import { FollowUpRules } from '@/components/settings/FollowUpRules';
+import { BrandingSettings } from '@/components/settings/BrandingSettings';
+import { DataExport } from '@/components/settings/DataExport';
+import type { ServiceFollowupRule, BusinessProfile } from '../types';
 
 export default function Settings({ onLogout }: { onLogout: () => void }) {
   const { profile, loading, setProfile } = useBusinessProfile();
@@ -74,11 +74,13 @@ export default function Settings({ onLogout }: { onLogout: () => void }) {
             'loved our service? Refer a friend and you both get a discount on your next visit!',
         });
 
-        const { data, error } = await supabase
-          .from('service_followup_rules')
-          .select('*')
-          .eq('business_id', profile.id);
-        if (!error && data) setRules(data);
+        if (supabase) {
+          const { data, error } = await supabase
+            .from('service_followup_rules')
+            .select('*')
+            .eq('business_id', profile.id);
+          if (!error && data) setRules(data);
+        }
       }
     }
     loadData();
@@ -136,7 +138,10 @@ export default function Settings({ onLogout }: { onLogout: () => void }) {
     setSaving(true);
 
     const user = localDb.getAuth();
-    if (!user) return;
+    if (!user) {
+      setSaving(false);
+      return;
+    }
 
     const payload = {
       business_name: formData.business_name,
@@ -156,11 +161,15 @@ export default function Settings({ onLogout }: { onLogout: () => void }) {
       msg_referral: formData.msg_referral,
     };
 
-    localStorage.setItem('deskTracker_lang', formData.default_language);
+    try {
+      localStorage.setItem('deskTracker_lang', formData.default_language);
+    } catch {
+      // localStorage may be unavailable
+    }
 
     await localDb.saveProfile(user.id, payload);
     toast.success('Profile saved correctly!');
-    setProfile({ ...profile, ...payload, isNew: false, id: user.id });
+    setProfile((prev) => ({ ...(prev || {}), ...payload, isNew: false, id: user.id } as BusinessProfile));
 
     setSaving(false);
   };
@@ -193,62 +202,52 @@ export default function Settings({ onLogout }: { onLogout: () => void }) {
         </Button>
       </div>
 
-      <Tabs defaultValue="business" className="space-y-4">
-        <TabsList className="grid grid-cols-2 md:grid-cols-4 w-full h-auto gap-2 bg-transparent p-0">
-          <TabsTrigger
-            value="business"
-            className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary border rounded-xl py-2.5 shrink-0 text-sm font-semibold"
-          >
-            Business
-          </TabsTrigger>
-          <TabsTrigger
-            value="messages"
-            className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary border rounded-xl py-2.5 shrink-0 text-sm font-semibold"
-          >
-            Messages
-          </TabsTrigger>
-          <TabsTrigger
-            value="followup"
-            className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary border rounded-xl py-2.5 shrink-0 text-sm font-semibold"
-          >
-            Follow-up Rules
-          </TabsTrigger>
-          <TabsTrigger
-            value="branding"
-            className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary border rounded-xl py-2.5 shrink-0 text-sm font-semibold"
-          >
-            Branding
-          </TabsTrigger>
-          <TabsTrigger
-            value="loyalty"
-            className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary border rounded-xl py-2.5 shrink-0 text-sm font-semibold"
-          >
-            Loyalty
-          </TabsTrigger>
-          <TabsTrigger
-            value="subscription"
-            className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary border rounded-xl py-2.5 shrink-0 text-sm font-semibold"
-          >
-            Subscription
-          </TabsTrigger>
-          <TabsTrigger
-            value="export"
-            className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary border rounded-xl py-2.5 shrink-0 text-sm font-semibold"
-          >
-            Data Export
-          </TabsTrigger>
-        </TabsList>
-
-        <form onSubmit={handleSave} className="space-y-4 mt-6">
-          <div className="flex justify-end border-b pb-4 mb-4">
-            <Button
-              type="submit"
-              disabled={saving}
-              className="w-full sm:w-auto"
+      <form onSubmit={handleSave} className="space-y-4">
+        <Tabs defaultValue="business" className="space-y-4">
+          <TabsList className="grid grid-cols-2 md:grid-cols-4 w-full h-auto gap-2 bg-transparent p-0">
+            <TabsTrigger
+              value="business"
+              className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary border rounded-xl py-2.5 shrink-0 text-sm font-semibold"
             >
-              {saving ? 'Saving...' : 'Save All Settings'}
-            </Button>
-          </div>
+              Business
+            </TabsTrigger>
+            <TabsTrigger
+              value="messages"
+              className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary border rounded-xl py-2.5 shrink-0 text-sm font-semibold"
+            >
+              Messages
+            </TabsTrigger>
+            <TabsTrigger
+              value="followup"
+              className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary border rounded-xl py-2.5 shrink-0 text-sm font-semibold"
+            >
+              Follow-up Rules
+            </TabsTrigger>
+            <TabsTrigger
+              value="branding"
+              className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary border rounded-xl py-2.5 shrink-0 text-sm font-semibold"
+            >
+              Branding
+            </TabsTrigger>
+            <TabsTrigger
+              value="loyalty"
+              className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary border rounded-xl py-2.5 shrink-0 text-sm font-semibold"
+            >
+              Loyalty
+            </TabsTrigger>
+            <TabsTrigger
+              value="subscription"
+              className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary border rounded-xl py-2.5 shrink-0 text-sm font-semibold"
+            >
+              Subscription
+            </TabsTrigger>
+            <TabsTrigger
+              value="export"
+              className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary border rounded-xl py-2.5 shrink-0 text-sm font-semibold"
+            >
+              Data Export
+            </TabsTrigger>
+          </TabsList>
 
           <TabsContent value="business" className="space-y-4 mt-0">
             <BusinessSettings
@@ -266,32 +265,42 @@ export default function Settings({ onLogout }: { onLogout: () => void }) {
               onApplyLanguageTemplates={handleApplyLanguageTemplates}
             />
           </TabsContent>
-        </form>
 
-        <TabsContent value="followup" className="space-y-4 mt-6">
-          <FollowUpRules
-            profile={profile}
-            rules={rules}
-            onRulesChange={setRules}
-          />
-        </TabsContent>
+          <TabsContent value="followup" className="space-y-4 mt-0">
+            <FollowUpRules
+              profile={profile}
+              rules={rules}
+              onRulesChange={setRules}
+            />
+          </TabsContent>
 
-        <TabsContent value="branding" className="space-y-4 mt-0">
-          <BrandingSettings />
-        </TabsContent>
+          <TabsContent value="branding" className="space-y-4 mt-0">
+            <BrandingSettings />
+          </TabsContent>
 
-        <TabsContent value="loyalty" className="space-y-4 mt-0">
-          <LoyaltyTabContent />
-        </TabsContent>
+          <TabsContent value="loyalty" className="space-y-4 mt-0">
+            <LoyaltyTabContent />
+          </TabsContent>
 
-        <TabsContent value="subscription" className="space-y-4 mt-0">
-          <SubscriptionTabContent profile={profile} setProfile={setProfile} />
-        </TabsContent>
+          <TabsContent value="subscription" className="space-y-4 mt-0">
+            <SubscriptionTabContent profile={profile} setProfile={setProfile} />
+          </TabsContent>
 
-        <TabsContent value="export" className="space-y-6 mt-6">
-          <DataExport profile={profile} />
-        </TabsContent>
-      </Tabs>
+          <TabsContent value="export" className="space-y-6 mt-0">
+            <DataExport profile={profile} />
+          </TabsContent>
+        </Tabs>
+
+        <div className="flex justify-end border-t pt-4 mt-4">
+          <Button
+            type="submit"
+            disabled={saving}
+            className="w-full sm:w-auto"
+          >
+            {saving ? 'Saving...' : 'Save All Settings'}
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -315,22 +324,22 @@ function LoyaltyTabContent() {
   );
 }
 
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/card';
-import { Label } from '../components/ui/label';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 
 function SubscriptionTabContent({
   profile,
   setProfile,
 }: {
-  profile: { is_pro?: boolean } | null;
-  setProfile: React.Dispatch<React.SetStateAction<any>>;
+  profile: BusinessProfile | null;
+  setProfile: React.Dispatch<React.SetStateAction<BusinessProfile | null>>;
 }) {
   const handleTogglePro = async () => {
     const user = localDb.getAuth();
     if (user) {
       const payload = { ...profile, is_pro: !profile?.is_pro };
       await localDb.saveProfile(user.id, payload);
-      setProfile(payload);
+      setProfile((prev) => ({ ...(prev || {}), ...payload } as BusinessProfile));
       toast.success(
         payload.is_pro ? 'Upgraded to Pro!' : 'Downgraded to Free.'
       );

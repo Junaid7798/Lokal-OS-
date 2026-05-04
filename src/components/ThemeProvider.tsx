@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
-import { useColorTheme } from '../hooks/useColorTheme';
+import { useColorTheme } from '@/hooks/useColorTheme';
 
 export function ThemeProvider({
   children,

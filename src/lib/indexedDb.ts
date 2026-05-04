@@ -15,6 +15,8 @@ const STORES = {
   SETTINGS: 'settings',
   AUTOMATION_SEQUENCES: 'automation_sequences',
   AUTOMATION_JOBS: 'automation_jobs',
+  LOCATIONS: 'locations',
+  LOYALTY_RULES: 'loyalty_rules',
 } as const;
 
 /** Type for store name values */
@@ -29,6 +31,8 @@ interface DBSchema {
   settings: SettingsRecord;
   automation_sequences: AutomationSequenceRecord;
   automation_jobs: AutomationJobRecord;
+  locations: LocationRecord;
+  loyalty_rules: LoyaltyRuleRecord;
 }
 
 /** Customer record structure */
@@ -102,6 +106,28 @@ interface ProfileRecord {
 interface SettingsRecord {
   key: string;
   [key: string]: unknown;
+}
+
+/** Location record structure */
+interface LocationRecord {
+  id: string;
+  business_id: string;
+  name: string;
+  address?: string;
+  phone?: string;
+  active: boolean;
+  created_at: string;
+}
+
+/** Loyalty rule record structure */
+interface LoyaltyRuleRecord {
+  id: string;
+  business_id: string;
+  rule_name: string;
+  visit_threshold: number;
+  reward_text: string;
+  active: boolean;
+  created_at: string;
 }
 
 /**
@@ -186,6 +212,20 @@ class IndexedDBManager {
           jobStore.createIndex('customer_id', 'customer_id', { unique: false });
           jobStore.createIndex('status', 'status', { unique: false });
           jobStore.createIndex('next_step_at', 'next_step_at', { unique: false });
+        }
+
+        // Create locations store
+        if (!db.objectStoreNames.contains(STORES.LOCATIONS)) {
+          const locStore = db.createObjectStore(STORES.LOCATIONS, { keyPath: 'id' });
+          locStore.createIndex('business_id', 'business_id', { unique: false });
+          locStore.createIndex('active', 'active', { unique: false });
+        }
+
+        // Create loyalty_rules store
+        if (!db.objectStoreNames.contains(STORES.LOYALTY_RULES)) {
+          const lrStore = db.createObjectStore(STORES.LOYALTY_RULES, { keyPath: 'id' });
+          lrStore.createIndex('business_id', 'business_id', { unique: false });
+          lrStore.createIndex('active', 'active', { unique: false });
         }
       };
     });

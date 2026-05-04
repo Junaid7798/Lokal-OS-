@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { BusinessProfile } from '../types';
-import { localDb } from '../lib/localDb';
+import { localDb } from '@/lib/localDb';
 
 /**
  * Hook to retrieve and manage the current business profile.

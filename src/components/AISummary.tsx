@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
-import { generateSummary } from '../lib/geminiAssistant';
+import { generateSummary } from '@/lib/geminiAssistant';
 import { Bot, Sparkles, Copy, Save } from 'lucide-react';
 import { toast } from 'sonner';
 

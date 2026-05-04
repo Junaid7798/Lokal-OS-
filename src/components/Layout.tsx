@@ -15,8 +15,8 @@ import {
   Award,
   IndianRupee,
 } from 'lucide-react';
-import { cn } from '../lib/utils';
-import { useStaffTracker } from '../hooks/useStaffTracker';
+import { cn } from '@/lib/utils';
+import { useStaffTracker } from '@/hooks/useStaffTracker';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -171,7 +171,7 @@ const MobileNavItem: React.FC<{
   );
 };
 
-import { useBusinessProfile } from '../hooks/useBusinessProfile';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
 
 function StaffSelector() {
   const { activeStaff, setActiveStaff } = useStaffTracker();

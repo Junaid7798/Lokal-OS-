@@ -7,37 +7,37 @@ import React, {
   useTransition,
   useDeferredValue,
 } from 'react';
-import { localDb } from '../lib/localDb';
-import { logAction } from '../lib/auditLogger';
-import { useBusinessProfile } from '../hooks/useBusinessProfile';
-import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
-import { cleanPhoneNumber, isValidPhoneNumber } from '../lib/validation';
-import { enqueueSyncOp } from '../lib/syncQueue';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
+import { localDb } from '@/lib/localDb';
+import { logAction } from '@/lib/auditLogger';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { cleanPhoneNumber, isValidPhoneNumber } from '@/lib/validation';
+import { enqueueSyncOp } from '@/lib/syncQueue';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '../components/ui/dialog';
-import { Label } from '../components/ui/label';
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import {
   Card,
   CardHeader,
   CardTitle,
   CardDescription,
   CardContent,
-} from '../components/ui/card';
+} from '@/components/ui/card';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../components/ui/select';
-import { Skeleton } from '../components/ui/skeleton';
+} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import {
   Search,
@@ -58,7 +58,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import type { Customer, Visit, Action, CustomerWithVisits } from '../types';
-import CustomerDetailModal from '../components/CustomerDetailModal';
+import CustomerDetailModal from '@/components/CustomerDetailModal';
 
 export default function Customers() {
   const { profile } = useBusinessProfile();
@@ -82,6 +82,8 @@ export default function Customers() {
   const [consentStatus, setConsentStatus] = useState(true);
 
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithVisits | null>(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
 
   useEffect(() => {
     if (profile?.id) {
@@ -91,10 +93,14 @@ export default function Customers() {
 
   async function loadCustomers() {
     setLoading(true);
-    const data = await localDb.getCustomers(profile.id);
+    const data = await localDb.getCustomers(profile.id, { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE });
     setCustomers(data as CustomerWithVisits[]);
     setLoading(false);
   }
+
+  useEffect(() => {
+    if (profile?.id) loadCustomers();
+  }, [page, profile?.id]);
 
   async function handleAddCustomer(e: React.FormEvent) {
     e.preventDefault();
@@ -774,6 +780,28 @@ export default function Customers() {
           </>
         )}
       </div>
+
+      {!loading && processedCustomers.length > 0 && (
+        <div className="flex items-center justify-between pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => p - 1)}
+          >
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground">Page {page}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={processedCustomers.length < PAGE_SIZE}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </Button>
+        </div>
+      )}
 
       {selectedCustomer && (
         <CustomerDetailModal

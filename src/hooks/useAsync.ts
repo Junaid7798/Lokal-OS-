@@ -86,18 +86,18 @@ export function useAsync<T>(
  * const { execute } = useAsyncCallback(submitForm);
  * <form onSubmit={execute}>...</form>
  */
-export function useAsyncCallback<T extends (...args: any[]) => Promise<any>>(
-  callback: T,
-  options: UseAsyncOptions<ReturnType<T>> = {}
+export function useAsyncCallback<T>(
+  callback: (...args: unknown[]) => Promise<T>,
+  options: UseAsyncOptions<T> = {}
 ) {
-  const [state, setState] = useState<AsyncState<ReturnType<T>>>({
+  const [state, setState] = useState<AsyncState<T>>({
     data: options.initialData ?? null,
     loading: false,
     error: null,
   });
 
   const execute = useCallback(
-    async (...args: Parameters<T>) => {
+    async (...args: unknown[]) => {
       setState((prev) => ({ ...prev, loading: true, error: null }));
 
       try {

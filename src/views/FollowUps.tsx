@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { localDb } from '../lib/localDb';
-import { useBusinessProfile } from '../hooks/useBusinessProfile';
-import { Card } from '../components/ui/card';
-import { Button } from '../components/ui/button';
+import { localDb } from '@/lib/localDb';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { differenceInDays } from 'date-fns';
-import { logAction } from '../lib/actionLogger';
+import { logAction } from '@/lib/actionLogger';
 import type { CustomerWithVisits, Visit, Action } from '../types';
 
 interface FollowUpTask {

@@ -18,6 +18,7 @@ import { idb, migrateFromLocalStorage, STORES } from './indexedDb';
 import type { StoreName } from './indexedDb';
 import { isSupabaseConfigured } from './supabaseClient';
 import { enqueueSyncOp } from './syncQueue';
+import { generateSafeId } from './utils';
 
 /** Tracks IndexedDB initialization state */
 let isIndexedDBReady = false;
@@ -50,12 +51,13 @@ async function ensureIndexedDB(): Promise<void> {
 /**
  * Generates unique identifier for new records.
  * Uses timestamp + random string to avoid ID collisions.
- * 
+ *
  * @returns Unique ID string
  */
 function generateId(): string {
-  return Date.now().toString() + '_' + Math.random().toString(36).substring(7);
+  return generateSafeId();
 }
+
 
 /**
  * Retrieves current active staff name for attribution.
@@ -305,7 +307,7 @@ export const localDb = {
    * @param userId - Business identifier
    * @returns Array of customers with visits
    */
-  getCustomers: async (userId: string) => {
+  getCustomers: async (userId: string, options?: { limit?: number; offset?: number }) => {
     const customers = await getAllByBusinessId<Record<string, unknown>>(
       STORES.CUSTOMERS,
       userId
@@ -324,7 +326,7 @@ export const localDb = {
       visitsByCustomerId.get(cid)!.push(visit);
     }
 
-    return (customers
+    const sorted = (customers
       .map((customer) => ({
         ...customer,
         visits: visitsByCustomerId.get(customer.id as string) || [],
@@ -334,6 +336,13 @@ export const localDb = {
           new Date(b.created_at || 0).getTime() -
           new Date(a.created_at || 0).getTime()
       );
+
+    const offset = options?.offset ?? 0;
+    const limit = options?.limit;
+    if (limit !== undefined) {
+      return sorted.slice(offset, offset + limit);
+    }
+    return sorted;
   },
 
   /**
@@ -837,5 +846,81 @@ export const localDb = {
       completed: jobs.filter(j => j.status === 'completed').length,
       failed: jobs.filter(j => j.status === 'failed').length,
     };
+  },
+
+  // ============================================================================
+  // LOCATIONS
+  // ============================================================================
+
+  /**
+   * Gets all locations for a business.
+   */
+  getLocations: async (businessId: string) => {
+    return getAllByBusinessId<Record<string, unknown>>(STORES.LOCATIONS, businessId);
+  },
+
+  /**
+   * Adds a new location.
+   */
+  addLocation: async (businessId: string, location: { name: string; address?: string; phone?: string }) => {
+    const record = {
+      id: generateSafeId(),
+      business_id: businessId,
+      name: location.name,
+      address: location.address || '',
+      phone: location.phone || '',
+      active: true,
+      created_at: new Date().toISOString(),
+    };
+    await putRecord(STORES.LOCATIONS, record as { id: string; business_id: string });
+    return record;
+  },
+
+  /**
+   * Updates a location.
+   */
+  updateLocation: async (id: string, updates: Record<string, unknown>) => {
+    const existing = await get<Record<string, unknown>>(STORES.LOCATIONS, id);
+    if (!existing) return null;
+    const updated = { ...existing, ...updates };
+    await putRec(STORES.LOCATIONS, updated as { id: string; business_id: string });
+    return updated;
+  },
+
+  // ============================================================================
+  // LOYALTY RULES
+  // ============================================================================
+
+  /**
+   * Gets all loyalty rules for a business.
+   */
+  getLoyaltyRules: async (businessId: string) => {
+    return getAllByBusinessId<Record<string, unknown>>(STORES.LOYALTY_RULES, businessId);
+  },
+
+  /**
+   * Adds a new loyalty rule.
+   */
+  addLoyaltyRule: async (businessId: string, rule: Record<string, unknown>) => {
+    const record = {
+      ...rule,
+      id: generateSafeId(),
+      business_id: businessId,
+      active: true,
+      created_at: new Date().toISOString(),
+    };
+    await putRecord(STORES.LOYALTY_RULES, record as { id: string; business_id: string });
+    return record;
+  },
+
+  /**
+   * Updates a loyalty rule.
+   */
+  updateLoyaltyRule: async (id: string, updates: Record<string, unknown>) => {
+    const existing = await get<Record<string, unknown>>(STORES.LOYALTY_RULES, id);
+    if (!existing) return null;
+    const updated = { ...existing, ...updates };
+    await putRec(STORES.LOYALTY_RULES, updated as { id: string; business_id: string });
+    return updated;
   },
 };

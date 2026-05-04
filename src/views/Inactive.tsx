@@ -1,17 +1,29 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import { useBusinessProfile } from '../hooks/useBusinessProfile';
-import { Card } from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { differenceInDays, format, subDays } from 'date-fns';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { differenceInDays, format } from 'date-fns';
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-} from '../components/ui/tabs';
+} from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import type { Customer, Visit, CustomerWithVisits } from '../types';
+import type { Visit, CustomerWithVisits } from '../types';
+import { safeDate } from '@/lib/utils';
+import { AlertTriangle } from 'lucide-react';
 
 interface InactiveItem {
   customer: CustomerWithVisits;
@@ -30,12 +42,30 @@ export default function Inactive() {
     '90': [],
   });
   const [loading, setLoading] = useState(true);
+  const [needsSetup, setNeedsSetup] = useState(false);
+
+  // Modal state for "Returned" action
+  const [returnModalOpen, setReturnModalOpen] = useState(false);
+  const [returnCustomer, setReturnCustomer] = useState<CustomerWithVisits | null>(null);
+  const [returnBillValue, setReturnBillValue] = useState('');
+  const [returnAfterFollowup, setReturnAfterFollowup] = useState(false);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) {
+      setNeedsSetup(true);
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     async function loadInactive() {
-      if (!profile?.id) return;
+      if (!profile?.id || needsSetup) return;
+      if (!supabase) {
+        setNeedsSetup(true);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
-      // Fetch customers with visits joined
       const { data: customersVisits, error } = await supabase
         .from('customers')
         .select('*, visits(*)')
@@ -57,15 +87,16 @@ export default function Inactive() {
 
       customersVisits?.forEach((c: CustomerWithVisits) => {
         if (!c.visits || c.visits.length === 0) return;
-        const latestVisit = [...c.visits].sort(
+        const sortedVisits = [...c.visits].sort(
           (a, b) =>
-            new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime()
-        )[0];
-        const daysSince = differenceInDays(
-          now,
-          new Date(latestVisit.visit_date)
+            (safeDate(b.visit_date)?.getTime() || 0) -
+            (safeDate(a.visit_date)?.getTime() || 0)
         );
+        const latestVisit = sortedVisits[0];
+        const latestVisitDate = safeDate(latestVisit.visit_date);
+        if (!latestVisitDate) return;
 
+        const daysSince = differenceInDays(now, latestVisitDate);
         const item = { customer: c, visit: latestVisit, daysSince };
 
         if (daysSince >= 90) lists['90'].push(item);
@@ -77,55 +108,123 @@ export default function Inactive() {
       setLoading(false);
     }
     loadInactive();
-  }, [profile]);
+  }, [profile, needsSetup]);
 
-  const handleAction = async (
-    customer: CustomerWithVisits,
-    action: 'sent' | 'returned' | 'skip'
-  ) => {
-    if (action === 'sent') {
-      await supabase.from('message_events').insert({
-        customer_id: customer.id,
-        business_id: profile.id,
-        event_type: 'comeback_message_sent',
-        created_at: new Date().toISOString(),
-      });
-      toast.success('Marked as sent!');
-    } else if (action === 'returned') {
-      const billValue = prompt(
-        'Enter bill value (leave empty to use average):'
-      );
-      const isAfterFollowup = confirm(
-        'Did this return happen after a follow-up?'
-      );
+  const totalInactive =
+    inactiveLists['30'].length +
+    inactiveLists['45'].length +
+    inactiveLists['60'].length +
+    inactiveLists['90'].length;
 
-      // logic for returned
-      await supabase.from('returned_customers').insert({
-        customer_id: customer.id,
-        business_id: profile.id,
-        returned_at: new Date().toISOString(),
-        after_followup: isAfterFollowup,
-        bill_value: billValue ? parseFloat(billValue) : null,
-      });
-      toast.success('Marked as returned!');
-    } else if (action === 'skip') {
-      toast.success('Skipped');
+  const recoveryValue = Object.values(inactiveLists)
+    .flat()
+    .reduce((sum, item) => sum + (item.visit.bill_value || profile?.average_bill_value || 0), 0);
+
+  const handleActionSent = async (customer: CustomerWithVisits) => {
+    if (!supabase || !profile?.id) {
+      toast.error('Database not connected');
+      return;
     }
+    const { error } = await supabase.from('message_events').insert({
+      customer_id: customer.id,
+      business_id: profile.id,
+      event_type: 'comeback_message_sent',
+      created_at: new Date().toISOString(),
+    });
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success('Marked as sent!');
   };
 
-  const waLink = (customer: CustomerWithVisits) =>
-    `https://wa.me/${customer.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hi ${customer.name}, it's been a while! We miss you at ${profile?.business_name}. Book your next appointment with us to get a special discount.`)}`;
+  const openReturnModal = (customer: CustomerWithVisits) => {
+    setReturnCustomer(customer);
+    setReturnBillValue('');
+    setReturnAfterFollowup(false);
+    setReturnModalOpen(true);
+  };
+
+  const handleReturnConfirm = async () => {
+    if (!supabase || !profile?.id || !returnCustomer) {
+      toast.error('Database not connected');
+      return;
+    }
+    const bill = returnBillValue ? parseFloat(returnBillValue) : null;
+    if (returnBillValue && (isNaN(bill as number) || (bill as number) < 0)) {
+      toast.error('Please enter a valid bill value');
+      return;
+    }
+
+    const { error } = await supabase.from('returned_customers').insert({
+      customer_id: returnCustomer.id,
+      business_id: profile.id,
+      returned_at: new Date().toISOString(),
+      after_followup: returnAfterFollowup,
+      bill_value: bill,
+    });
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success('Marked as returned!');
+    setReturnModalOpen(false);
+    setReturnCustomer(null);
+  };
+
+  const [skipModalOpen, setSkipModalOpen] = useState(false);
+  const [skipCustomer, setSkipCustomer] = useState<CustomerWithVisits | null>(null);
+
+  const openSkipModal = (customer: CustomerWithVisits) => {
+    setSkipCustomer(customer);
+    setSkipModalOpen(true);
+  };
+
+  const handleSkipConfirm = () => {
+    toast.success('Skipped');
+    setSkipModalOpen(false);
+    setSkipCustomer(null);
+  };
+
+  const waLink = (customer: CustomerWithVisits) => {
+    const phone = customer.phone?.replace(/\D/g, '');
+    if (!phone) return '#';
+    const text = encodeURIComponent(
+      `Hi ${customer.name}, it's been a while! We miss you at ${profile?.business_name}. Book your next appointment with us to get a special discount.`
+    );
+    return `https://wa.me/${phone}?text=${text}`;
+  };
+
+  if (needsSetup) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
+        <h1 className="text-2xl font-bold mb-4">Inactive Customers</h1>
+        <Card className="p-6">
+          <div className="flex items-center gap-2 text-amber-600">
+            <AlertTriangle className="h-5 w-5" />
+            <p className="font-medium">Supabase Not Connected</p>
+          </div>
+          <p className="text-sm text-muted-foreground mt-2">
+            Inactive tracking requires a Supabase database.
+          </p>
+          <Button className="mt-4" onClick={() => (window.location.href = '/setup')}>
+            Set Up Supabase
+          </Button>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-5xl mx-auto pb-24">
       <div className="grid grid-cols-2 gap-4">
         <Card className="p-4">
           <p className="text-sm text-muted-foreground">Inactive Customers</p>
-          <p className="text-2xl font-bold">12</p>
+          <p className="text-2xl font-bold">{totalInactive}</p>
         </Card>
         <Card className="p-4">
           <p className="text-sm text-muted-foreground">Recovery Value</p>
-          <p className="text-2xl font-bold">$1,200</p>
+          <p className="text-2xl font-bold">₹{recoveryValue}</p>
         </Card>
       </div>
 
@@ -152,30 +251,27 @@ export default function Inactive() {
                     <p className="font-semibold">{t.customer.name}</p>
                     <p className="text-sm text-muted-foreground">
                       Last visited:{' '}
-                      {format(new Date(t.visit.visit_date), 'MMM d')} (
+                      {format(safeDate(t.visit.visit_date) || new Date(), 'MMM d')} (
                       {t.daysSince} days ago)
                     </p>
                     <div className="flex gap-2">
                       <a
-                          href={waLink(t.customer)}
-                          target="_blank"
-                          onClick={() => handleAction(t.customer, 'sent')}
-                          className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-3"
-                        >
-                          Send Comeback
-                        </a>
+                        href={waLink(t.customer)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => handleActionSent(t.customer)}
+                        className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-3"
+                      >
+                        Send Comeback
+                      </a>
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleAction(t.customer, 'returned')}
+                        onClick={() => openReturnModal(t.customer)}
                       >
                         Returned
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleAction(t.customer, 'skip')}
-                      >
+                      <Button size="sm" variant="ghost" onClick={() => openSkipModal(t.customer)}>
                         Skip
                       </Button>
                     </div>
@@ -186,6 +282,61 @@ export default function Inactive() {
           </TabsContent>
         ))}
       </Tabs>
+
+      <Dialog open={returnModalOpen} onOpenChange={setReturnModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mark as Returned</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="returnBill">Bill Value (optional)</Label>
+              <Input
+                id="returnBill"
+                type="number"
+                placeholder="Leave empty to use average"
+                value={returnBillValue}
+                onChange={(e) => setReturnBillValue(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="afterFollowup"
+                className="rounded border-gray-300 text-primary w-5 h-5 cursor-pointer accent-primary"
+                checked={returnAfterFollowup}
+                onChange={(e) => setReturnAfterFollowup(e.target.checked)}
+              />
+              <Label htmlFor="afterFollowup" className="text-sm font-normal cursor-pointer">
+                This return happened after a follow-up
+              </Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReturnModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleReturnConfirm}>Confirm</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={skipModalOpen} onOpenChange={setSkipModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Skip Customer</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to skip {skipCustomer?.name ?? 'this customer'}?
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSkipModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSkipConfirm}>Confirm Skip</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useBusinessProfile } from '../hooks/useBusinessProfile';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
 
 export function LockedFeature({
   children,

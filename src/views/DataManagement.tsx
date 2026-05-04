@@ -1,22 +1,30 @@
-import React, { useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import { useBusinessProfile } from '../hooks/useBusinessProfile';
+import { useState, useEffect } from 'react';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
+import { AlertTriangle } from 'lucide-react';
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
   CardDescription,
-} from '../components/ui/card';
-import { Button } from '../components/ui/button';
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import Papa from 'papaparse';
 
 export default function DataManagement() {
   const { profile } = useBusinessProfile();
-  const [importData, setImportData] = useState<any[]>([]);
-  const [preview, setPreview] = useState<any[]>([]);
+  const [importData, setImportData] = useState<Record<string, unknown>[]>([]);
+  const [preview, setPreview] = useState<Record<string, unknown>[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
+  const [needsSetup, setNeedsSetup] = useState(false);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) {
+      setNeedsSetup(true);
+    }
+  }, []);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -26,21 +34,26 @@ export default function DataManagement() {
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
-        setImportData(results.data);
-        setPreview(results.data.slice(0, 10));
+        setImportData(results.data as Record<string, unknown>[]);
+        setPreview((results.data as Record<string, unknown>[]).slice(0, 10));
       },
     });
   };
 
   const importCustomers = async () => {
-    if (!profile?.id) return;
+    if (!supabase || !profile?.id) {
+      toast.error('Database not connected');
+      return;
+    }
 
     let imported = 0;
     let skipped = 0;
     let failed = 0;
 
     for (const row of importData) {
-      if (!row.name || !row.phone) {
+      const name = row.name || row.Name;
+      const phone = row.phone || row.Phone;
+      if (!name || !phone) {
         failed++;
         continue;
       }
@@ -50,7 +63,7 @@ export default function DataManagement() {
         .from('customers')
         .select('id')
         .eq('business_id', profile.id)
-        .eq('phone', row.phone);
+        .eq('phone', phone);
 
       if (existing && existing.length > 0) {
         skipped++;
@@ -61,10 +74,10 @@ export default function DataManagement() {
         .from('customers')
         .insert({
           business_id: profile.id,
-          name: row.name,
-          phone: row.phone,
-          source: row.source,
-          note: row.notes,
+          name,
+          phone,
+          source: row.source || row.Source || '',
+          note: row.notes || row.Notes || '',
         })
         .select()
         .single();
@@ -74,12 +87,14 @@ export default function DataManagement() {
         continue;
       }
 
-      if (row.last_visit_date && customer) {
+      const lastVisit = row.last_visit_date || row['Last Visit'] || row.visit_date;
+      const serviceCategory = row.service_category || row['Service Category'] || '';
+      if (lastVisit && customer) {
         await supabase.from('visits').insert({
           business_id: profile.id,
           customer_id: customer.id,
-          service_category: row.service_category,
-          visit_date: row.last_visit_date,
+          service_category: serviceCategory,
+          visit_date: lastVisit,
         });
       }
       imported++;
@@ -92,7 +107,10 @@ export default function DataManagement() {
   };
 
   const exportCustomers = async () => {
-    if (!profile?.id) return;
+    if (!supabase || !profile?.id) {
+      toast.error('Database not connected');
+      return;
+    }
 
     const { data: customers } = await supabase
       .from('customers')
@@ -119,6 +137,26 @@ export default function DataManagement() {
     link.setAttribute('download', 'customers.csv');
     link.click();
   };
+
+  if (needsSetup) {
+    return (
+      <div className="p-4 space-y-6">
+        <h1 className="text-2xl font-bold">Import/Export Data</h1>
+        <Card className="p-6">
+          <div className="flex items-center gap-2 text-amber-600">
+            <AlertTriangle className="h-5 w-5" />
+            <p className="font-medium">Supabase Not Connected</p>
+          </div>
+          <p className="text-sm text-muted-foreground mt-2">
+            Data import/export requires a Supabase database.
+          </p>
+          <Button className="mt-4" onClick={() => (window.location.href = '/setup')}>
+            Set Up Supabase
+          </Button>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 space-y-6">

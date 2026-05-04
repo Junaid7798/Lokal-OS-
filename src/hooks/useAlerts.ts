@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
-import { isSameDay, differenceInDays } from 'date-fns';
-import { format } from 'date-fns';
+import { isSameDay, differenceInDays, format } from 'date-fns';
 import type { CustomerWithVisits, Action, Alert } from '../types';
+import { safeDate, groupBy } from '@/lib/utils';
 
 /**
  * Parameters for useAlerts hook
@@ -17,10 +17,10 @@ interface UseAlertsParams {
  * - Overdue follow-ups (2-7 days since last visit without follow-up)
  * - Inactive customers (30+ days without contact)
  * - Customers added today
- * 
+ *
  * @param params - Object containing customers and actions arrays
  * @returns Array of Alert objects with type, message, action, and route
- * 
+ *
  * @example
  * const alerts = useAlerts({ customers, actions });
  * alerts.map(a => console.log(a.message));
@@ -30,41 +30,47 @@ export function useAlerts({ customers, actions }: UseAlertsParams): Alert[] {
     if (!customers.length) return [];
 
     const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    // Build indexed map for O(1) lookups instead of O(n×m) scans
+    const actionsByCustomer = groupBy(actions, (a) => a.customer_id);
 
     let overdueFollowUps = 0;
     let inactiveNotContacted = 0;
     let customersAddedToday = 0;
 
     for (const c of customers) {
-      if (c.created_at && isSameDay(new Date(c.created_at), today)) {
+      const createdDate = safeDate(c.created_at);
+      if (createdDate && isSameDay(createdDate, today)) {
         customersAddedToday++;
       }
 
       if (c.visits && c.visits.length > 0) {
         const sortedVisits = [...c.visits].sort(
           (a, b) =>
-            new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime()
+            (safeDate(b.visit_date)?.getTime() || 0) -
+            (safeDate(a.visit_date)?.getTime() || 0)
         );
         const latestVisit = sortedVisits[0];
-        const latestVisitDate = new Date(latestVisit.visit_date);
+        const latestVisitDate = safeDate(latestVisit.visit_date);
+        if (!latestVisitDate) continue;
+
         const daysSince = differenceInDays(today, latestVisitDate);
 
-        const hasFollowUp = actions.some(
-          (a: Action) =>
-            a.customer_id === c.id &&
+        const customerActions = actionsByCustomer.get(c.id) || [];
+
+        const hasFollowUp = customerActions.some(
+          (a) =>
             a.action_type === 'follow_up' &&
-            new Date(a.created_at) >= latestVisitDate
+            (safeDate(a.created_at)?.getTime() || 0) >= latestVisitDate.getTime()
         );
 
         if (!hasFollowUp && daysSince > 2 && daysSince <= 7) {
           overdueFollowUps++;
         }
 
-        const hasAnyContact = actions.some(
-          (a: Action) =>
-            a.customer_id === c.id &&
-            new Date(a.created_at) >= latestVisitDate
+        const hasAnyContact = customerActions.some(
+          (a) =>
+            (safeDate(a.created_at)?.getTime() || 0) >= latestVisitDate.getTime()
         );
 
         if (!hasAnyContact && daysSince >= 30) {
@@ -106,10 +112,10 @@ export function useAlerts({ customers, actions }: UseAlertsParams): Alert[] {
 /**
  * Finds customers with birthdays or anniversaries occurring today.
  * Prioritizes birthday over anniversary when both match.
- * 
+ *
  * @param customers - Array of customer records
  * @returns Array of customers with occasion info, sorted by name
- * 
+ *
  * @example
  * const todayOccasions = useOccasions(customers);
  * todayOccasions.forEach(c => sendBirthdayWish(c));
@@ -121,21 +127,20 @@ export function useOccasions(customers: CustomerWithVisits[]) {
 
     return customers
       .filter((c) => {
-        const birthdayMatch =
-          c.birthday_date &&
-          format(new Date(c.birthday_date), 'MM-dd') === todayStr;
+        const birthdayDate = safeDate(c.birthday_date);
+        const anniversaryDate = safeDate(c.anniversary_date);
+        const birthdayMatch = birthdayDate && format(birthdayDate, 'MM-dd') === todayStr;
         const anniversaryMatch =
-          c.anniversary_date &&
-          format(new Date(c.anniversary_date), 'MM-dd') === todayStr;
+          anniversaryDate && format(anniversaryDate, 'MM-dd') === todayStr;
         return birthdayMatch || anniversaryMatch;
       })
-      .map((c) => ({
-        ...c,
-        occasionType:
-          c.birthday_date &&
-          format(new Date(c.birthday_date), 'MM-dd') === todayStr
-            ? 'birthday'
-            : ('anniversary' as const),
-      }));
+      .map((c) => {
+        const birthdayDate = safeDate(c.birthday_date);
+        const isBirthday = birthdayDate && format(birthdayDate, 'MM-dd') === todayStr;
+        return {
+          ...c,
+          occasionType: isBirthday ? ('birthday' as const) : ('anniversary' as const),
+        };
+      });
   }, [customers]);
 }

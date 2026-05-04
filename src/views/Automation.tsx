@@ -4,12 +4,12 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { LockedFeature } from '../components/LockedFeature';
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { LockedFeature } from '@/components/LockedFeature';
 import { AlertTriangle, Plus, Play, Pause, Trash2, Edit2, Zap, MessageSquare, Calendar, Clock } from 'lucide-react';
-import { localDb } from '../lib/localDb';
-import { useBusinessProfile } from '../hooks/useBusinessProfile';
+import { localDb } from '@/lib/localDb';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -17,16 +17,16 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '../components/ui/dialog';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../components/ui/select';
+} from '@/components/ui/select';
 
 interface AutomationSequence {
   id: string;
@@ -142,14 +142,22 @@ export default function Automation() {
     }
   }
 
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
   async function handleDelete(id: string) {
-    if (!confirm('Delete this sequence?')) return;
+    setDeleteTarget(id);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
     try {
-      await localDb.deleteAutomationSequence(id);
+      await localDb.deleteAutomationSequence(deleteTarget);
       toast.success('Sequence deleted');
       loadSequences();
     } catch (err) {
       console.error('Failed to delete:', err);
+    } finally {
+      setDeleteTarget(null);
     }
   }
 
@@ -159,8 +167,8 @@ export default function Automation() {
       name: seq.name,
       trigger_type: seq.trigger_type,
     });
-    // steps is loaded from DB but might not be typed
-    setSteps((seq as unknown as { steps?: typeof steps }).steps || []);
+    const seqSteps = (seq as unknown as Record<string, unknown>).steps;
+    setSteps(Array.isArray(seqSteps) ? (seqSteps as typeof steps) : []);
     setShowDialog(true);
   }
 
@@ -258,111 +266,128 @@ export default function Automation() {
           </CardContent>
         </Card>
 
-        {showDialog && (
-          <Dialog open={showDialog} onOpenChange={setShowDialog}>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingSequence ? 'Edit Sequence' : 'Create Sequence'}
-                </DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label>Sequence Name</Label>
-                  <Input
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g., Welcome Follow-ups"
-                  />
-                </div>
-                <div>
-                  <Label>Trigger</Label>
-                  <Select
-                    value={formData.trigger_type}
-                    onValueChange={(v) => setFormData({ ...formData, trigger_type: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TRIGGER_TYPES.map((type) => (
-                        <SelectItem key={type.value} value={type.value}>
-                          {type.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Steps</Label>
-                  <div className="space-y-2">
-                    {steps.map((step, idx) => (
-                      <div key={idx} className="flex gap-2 items-center">
-                        <span className="text-sm text-muted-foreground w-6">
-                          {idx + 1}.
-                        </span>
-                        <Select
-                          value={step.action_type}
-                          onValueChange={(v) => {
-                            const newSteps = [...steps];
-                            newSteps[idx].action_type = v;
-                            setSteps(newSteps);
-                          }}
-                        >
-                          <SelectTrigger className="flex-1">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ACTION_TYPES.map((type) => (
-                              <SelectItem key={type.value} value={type.value}>
-                                {type.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          type="number"
-                          className="w-20"
-                          value={step.delay_days}
-                          onChange={(e) => {
-                            const newSteps = [...steps];
-                            newSteps[idx].delay_days = parseInt(e.target.value) || 0;
-                            setSteps(newSteps);
-                          }}
-                          placeholder="Days"
-                        />
-                        <span className="text-sm text-muted-foreground">days</span>
-                      </div>
-                    ))}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2"
-                    onClick={() => {
-                      setSteps([
-                        ...steps,
-                        {
-                          step_order: steps.length,
-                          action_type: 'whatsapp_message',
-                          delay_days: 0,
-                        },
-                      ]);
-                    }}
-                  >
-                    + Add Step
-                  </Button>
-                </div>
+        <Dialog open={showDialog} onOpenChange={setShowDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                {editingSequence ? 'Edit Sequence' : 'Create Sequence'}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Sequence Name</Label>
+                <Input
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="e.g., Welcome Follow-ups"
+                />
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowDialog(false)}>
-                  Cancel
+              <div>
+                <Label>Trigger</Label>
+                <Select
+                  value={formData.trigger_type}
+                  onValueChange={(v) => setFormData({ ...formData, trigger_type: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TRIGGER_TYPES.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Steps</Label>
+                <div className="space-y-2">
+                  {steps.map((step, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <span className="text-sm text-muted-foreground w-6">
+                        {idx + 1}.
+                      </span>
+                      <Select
+                        value={step.action_type}
+                        onValueChange={(v) => {
+                          const newSteps = [...steps];
+                          newSteps[idx].action_type = v;
+                          setSteps(newSteps);
+                        }}
+                      >
+                        <SelectTrigger className="flex-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ACTION_TYPES.map((type) => (
+                            <SelectItem key={type.value} value={type.value}>
+                              {type.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        className="w-20"
+                        value={step.delay_days}
+                        onChange={(e) => {
+                          const newSteps = [...steps];
+                          newSteps[idx].delay_days = parseInt(e.target.value) || 0;
+                          setSteps(newSteps);
+                        }}
+                        placeholder="Days"
+                      />
+                      <span className="text-sm text-muted-foreground">days</span>
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => {
+                    setSteps([
+                      ...steps,
+                      {
+                        step_order: steps.length,
+                        action_type: 'whatsapp_message',
+                        delay_days: 0,
+                      },
+                    ]);
+                  }}
+                >
+                  + Add Step
                 </Button>
-                <Button onClick={handleSave}>Save</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSave}>Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Delete Sequence</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              Are you sure you want to delete this automation sequence? This action cannot be undone.
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmDelete}>
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </LockedFeature>
     </div>
   );

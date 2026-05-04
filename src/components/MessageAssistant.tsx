@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from './ui/select';
 import { Textarea } from './ui/textarea';
-import { generateMessage } from '../lib/geminiAssistant';
+import { generateMessage } from '@/lib/geminiAssistant';
 import { Bot, Sparkles, Copy, Save } from 'lucide-react';
 import { toast } from 'sonner';
 

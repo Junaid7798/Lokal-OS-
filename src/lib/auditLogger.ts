@@ -7,7 +7,7 @@ export async function logAction(params: {
   action: string;
   entity_type: string;
   entity_id?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }) {
   if (!supabase) {
     console.warn('Supabase not available, skipping audit log');

@@ -1,12 +1,12 @@
 export const exportToCSV = (
-  data: any[],
+  data: Record<string, unknown>[],
   filename: string,
   headers: string[]
 ) => {
   const csvContent = [
     headers.join(','),
     ...data.map((row) =>
-      headers.map((header) => `"${row[header] || ''}"`).join(',')
+      headers.map((header) => `"${(row[header] as string | number | boolean | undefined) ?? ''}"`).join(',')
     ),
   ].join('\n');
 

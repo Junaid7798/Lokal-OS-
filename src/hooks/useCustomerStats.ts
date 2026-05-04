@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { subDays, isSameDay } from 'date-fns';
 import { format } from 'date-fns';
+import { safeDate } from '@/lib/utils';
 import type {
   CustomerWithVisits,
   DashboardStats,
@@ -78,8 +79,8 @@ export function useRecentChartData(
     });
 
     for (const c of customers) {
-      if (c.created_at) {
-        const createdDate = new Date(c.created_at);
+      const createdDate = safeDate(c.created_at);
+      if (createdDate) {
         const dayData = last7Days.find((d) => isSameDay(d.date, createdDate));
         if (dayData) {
           dayData.customers += 1;
@@ -87,8 +88,8 @@ export function useRecentChartData(
       }
 
       c.visits?.forEach((v) => {
-        if (v.visit_date) {
-          const visitDate = new Date(v.visit_date);
+        const visitDate = safeDate(v.visit_date);
+        if (visitDate) {
           const vDayData = last7Days.find((d) => isSameDay(d.date, visitDate));
           if (vDayData) {
             vDayData.revenue += parseFloat(String(v.bill_value)) || 0;
